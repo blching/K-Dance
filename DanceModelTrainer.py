@@ -7,6 +7,7 @@ from sklearn.model_selection import train_test_split
 import tensorboard
 
 from PoseProcessing import PoseAnalyzer
+from PoseProcessing import EnhancedPoseAnalyzer
 from tensorflow import keras
 from keras.models import Sequential, load_model
 from keras.layers import LSTM, Dense, Dropout, Input
@@ -18,34 +19,65 @@ class DanceModelTrainer:
         self.model_dir = "dance_models"
         os.makedirs(self.model_dir, exist_ok=True)
     
-    def prepare_data(self, song_name):
-        # Load reference (professional) performances
-        X_ref = self.data_manager.load_reference_data(song_name)
-        
-        # Create labels (perfect performance)
-        y = [1] * len(X_ref)  # 1 = perfect performance
-        
-        # Add negative examples if available
-        user_data = self.data_manager.load_user_data(song_name)
-        if user_data:
-            X_ref.extend(user_data)
-            y.extend([0] * len(user_data))  # 0 = imperfect
-        
-        # Ensure all sequences have the same number of features
-        X_clean = []
-        y_clean = []
-        for i, seq in enumerate(X_ref):
-            # Filter out any sequences with incorrect dimensions
-            if seq and all(len(frame) == len(PoseAnalyzer.ANGLE_ORDER) for frame in seq):
-                X_clean.append(seq)
-                y_clean.append(y[i])
-            else:
-                print(f"Warning: Skipping invalid sequence with shape {[len(frame) for frame in seq] if seq else 'empty'}")
-        
-        return X_clean, np.array(y_clean)
+    def prepare_data(self, song_name, enhanced=True):
+        if enhanced:
+            # Load enhanced reference (professional) performances
+            X_ref = self.data_manager.load_enhanced_reference_data(song_name)
+            
+            # Create labels (perfect performance)
+            y = [1] * len(X_ref)  # 1 = perfect performance
+            
+            # Add negative examples if available
+            user_data = self.data_manager.load_enhanced_user_data(song_name)
+            if user_data:
+                X_ref.extend(user_data)
+                y.extend([0] * len(user_data))  # 0 = imperfect
+            
+            # Extract features from enhanced data
+            X_features = []
+            for seq in X_ref:
+                # Extract angles and positional features
+                seq_features = []
+                for frame in seq:
+                    # Combine angles and positional features
+                    frame_features = frame['angles'].copy()
+                    frame_features.extend(frame['body_center'])
+                    frame_features.extend(frame['body_scale'])
+                    frame_features.append(frame['body_orientation'])
+                    frame_features.extend(list(frame['limb_lengths'].values()))
+                    
+                    seq_features.append(frame_features)
+                X_features.append(seq_features)
+            
+            return X_features, np.array(y)
+        else:
+            # Original implementation for angle-only data
+            X_ref = self.data_manager.load_reference_data(song_name)
+            
+            # Create labels (perfect performance)
+            y = [1] * len(X_ref)  # 1 = perfect performance
+            
+            # Add negative examples if available
+            user_data = self.data_manager.load_user_data(song_name)
+            if user_data:
+                X_ref.extend(user_data)
+                y.extend([0] * len(user_data))  # 0 = imperfect
+            
+            # Ensure all sequences have the same number of features
+            X_clean = []
+            y_clean = []
+            for i, seq in enumerate(X_ref):
+                # Filter out any sequences with incorrect dimensions
+                if seq and all(len(frame) == len(PoseAnalyzer.ANGLE_ORDER) for frame in seq):
+                    X_clean.append(seq)
+                    y_clean.append(y[i])
+                else:
+                    print(f"Warning: Skipping invalid sequence with shape {[len(frame) for frame in seq] if seq else 'empty'}")
+            
+            return X_clean, np.array(y_clean)
     
-    def train_model(self, song_name, sequence_length=30):
-        X, y = self.prepare_data(song_name)
+    def train_model(self, song_name, sequence_length=30, enhanced=True):
+        X, y = self.prepare_data(song_name, enhanced)
         
         if not X:
             raise ValueError(f"No valid training data found for {song_name}")

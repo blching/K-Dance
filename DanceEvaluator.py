@@ -3,10 +3,11 @@ import numpy as np
 from PoseProcessing import PoseAnalyzer
 
 class DanceEvaluator:
-    def __init__(self, model, reference_sequence, audio_synchronizer=None):
+    def __init__(self, model, reference_sequence, audio_synchronizer=None, enhanced=False):
         self.model = model
-        self.reference = reference_sequence
+        self.reference_sequence = reference_sequence
         self.audio_synchronizer = audio_synchronizer
+        self.enhanced = enhanced
         self.sequence_length = 30
         self.current_sequence = deque(maxlen=self.sequence_length)
         self.beat_sequences = {}  # Store sequences for each beat
@@ -30,7 +31,23 @@ class DanceEvaluator:
             return None
         
         # Prepare sequence
-        sequence = np.array([list(self.current_sequence)])
+        if self.enhanced:
+            # For enhanced data, we might need to extract specific features
+            sequence_features = []
+            for frame in self.current_sequence:
+                if isinstance(frame, dict):  # Enhanced data
+                    # Extract the features used by the model
+                    features = frame['angles'].copy()
+                    features.extend(frame['body_center'])
+                    features.extend(frame['body_scale'])
+                    # Add other features as needed by the model
+                    sequence_features.append(features)
+                else:  # Angle-only data
+                    sequence_features.append(frame)
+            sequence = np.array([sequence_features])
+        else:
+            sequence = np.array([list(self.current_sequence)])
+        
         sequence = self.pad_sequence(sequence)
         
         # Get model prediction
