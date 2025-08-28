@@ -151,6 +151,7 @@ class VideoTrainer:
                 
                 # Draw landmarks if preview is enabled
                 if show_preview:
+                    frame = cv2.resize(frame, (350, 600))
                     self.pose_detector.draw_landmarks(frame, results.pose_landmarks)
                     cv2.putText(frame, f"Frame: {frame_count}/{total_frames}", 
                                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
