@@ -167,3 +167,33 @@ class DanceDataManager:
                 with open(os.path.join(self.data_dir, file), "r") as f:
                     ref_data.append(json.load(f))
         return ref_data
+    
+    def save_enhanced_session(self, session_data, song_name, performer_type="user"):
+        """Save session data with enhanced pose information"""
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        filename = f"{song_name}_{performer_type}_{timestamp}_enhanced.json"
+        path = os.path.join(self.data_dir, filename)
+        
+        # Convert any numpy arrays to lists for JSON serialization
+        def convert_for_json(obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {k: convert_for_json(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_for_json(item) for item in obj]
+            else:
+                return obj
+        
+        with open(path, "w") as f:
+            json.dump(convert_for_json(session_data), f, indent=2)
+        return path
+
+    def load_enhanced_user_data(self, song_name):
+        """Load enhanced user performance data"""
+        user_data = []
+        for file in os.listdir(self.data_dir):
+            if song_name in file and "user" in file and "enhanced" in file:
+                with open(os.path.join(self.data_dir, file), "r") as f:
+                    user_data.append(json.load(f))
+        return user_data
