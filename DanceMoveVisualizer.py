@@ -10,9 +10,10 @@ class EnhancedDanceMoveVisualizer:
     def __init__(self):
         self.mp_pose = mp.solutions.pose
         self.POSE_CONNECTIONS = self.mp_pose.POSE_CONNECTIONS
+        self.fixed_axes = True  # Add this flag to control coordinate system
         
     def create_skeleton_frame_enhanced(self, pose_data, ax, frame_num=0, total_frames=1):
-        """Create a skeleton frame using enhanced data that includes positional information"""
+        """Create a skeleton frame using enhanced data with fixed coordinate system"""
         ax.clear()
         
         # Extract data from enhanced pose data
@@ -23,27 +24,44 @@ class EnhancedDanceMoveVisualizer:
         limb_lengths = pose_data['limb_lengths']
         raw_positions = pose_data['raw_positions']
         
-        # Set the coordinate system based on body position and scale
-        ax.set_xlim(body_center[0] - body_scale[0]*2, body_center[0] + body_scale[0]*2)
-        ax.set_ylim(body_center[1] - body_scale[1]*2, body_center[1] + body_scale[1]*2)
-        ax.set_aspect('equal')
-        ax.invert_yaxis()
+        # Set fixed coordinate system from 0 to 1 on both axes
+        if self.fixed_axes:
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_aspect('equal')
+            ax.invert_yaxis()  # Invert y-axis to match image coordinates
+        else:
+            # Use dynamic coordinate system based on body position and scale
+            ax.set_xlim(body_center[0] - body_scale[0]*2, body_center[0] + body_scale[0]*2)
+            ax.set_ylim(body_center[1] - body_scale[1]*2, body_center[1] + body_scale[1]*2)
+            ax.set_aspect('equal')
+            ax.invert_yaxis()
+        
         ax.set_title(f'Dance Move - Frame {frame_num+1}/{total_frames}\n'
                     f'Body Center: ({body_center[0]:.2f}, {body_center[1]:.2f})\n'
                     f'Orientation: {np.degrees(body_orientation):.1f}°')
         
-        # Draw body center
-        center_circle = patches.Circle(body_center, 0.05, fill=True, color='red', alpha=0.7)
+        # Draw body center (scaled to fixed coordinate system)
+        if self.fixed_axes:
+            # Scale body center to fit [0, 1] range
+            scaled_center = [body_center[0], body_center[1]]
+            center_circle = patches.Circle(scaled_center, 0.01, fill=True, color='red', alpha=0.7)
+        else:
+            center_circle = patches.Circle(body_center, 0.05, fill=True, color='red', alpha=0.7)
         ax.add_patch(center_circle)
         
         # Draw orientation arrow
-        arrow_length = body_scale[0] * 0.8
+        if self.fixed_axes:
+            arrow_length = 0.1  # Fixed length in normalized coordinates
+        else:
+            arrow_length = body_scale[0] * 0.8
+            
         dx = arrow_length * np.cos(body_orientation)
         dy = arrow_length * np.sin(body_orientation)
         ax.arrow(body_center[0], body_center[1], dx, dy, 
-                head_width=0.05, head_length=0.05, fc='red', ec='red', alpha=0.7)
+                head_width=0.02, head_length=0.02, fc='red', ec='red', alpha=0.7)
         
-        # Draw skeleton using raw positions
+        # Draw skeleton using raw positions (already normalized to [0, 1])
         self.draw_skeleton_from_raw_positions(raw_positions, ax)
         
         # Draw limb length indicators
@@ -55,7 +73,7 @@ class EnhancedDanceMoveVisualizer:
         return ax
     
     def draw_skeleton_from_raw_positions(self, raw_positions, ax):
-        """Draw the skeleton using raw landmark positions"""
+        """Draw the skeleton using raw landmark positions with fixed coordinate system"""
         # Define colors for different body parts
         colors = {
             'left_arm': 'red',
@@ -92,20 +110,26 @@ class EnhancedDanceMoveVisualizer:
                 
                 # Draw the connection
                 ax.plot([start_pos[0], end_pos[0]], [start_pos[1], end_pos[1]], 
-                    color=color, linewidth=3, alpha=0.8)
+                       color=color, linewidth=3, alpha=0.8)
         
         # Draw landmarks
         for landmark_name, position in raw_positions.items():
-            circle = patches.Circle((position[0], position[1]), 0.02, 
-                                fill=True, color='orange', alpha=0.8)
+            if self.fixed_axes:
+                circle_size = 0.005  # Smaller circles for fixed coordinate system
+            else:
+                circle_size = 0.02
+                
+            circle = patches.Circle((position[0], position[1]), circle_size, 
+                                   fill=True, color='orange', alpha=0.8)
             ax.add_patch(circle)
             
-            # Add landmark label
-            ax.text(position[0] + 0.03, position[1] + 0.03, 
-                landmark_name.split('_')[-1], fontsize=8, alpha=0.7)
+            # Add landmark label (smaller font for fixed coordinate system)
+            fontsize = 6 if self.fixed_axes else 8
+            ax.text(position[0] + 0.01, position[1] + 0.01, 
+                   landmark_name.split('_')[-1], fontsize=fontsize, alpha=0.7)
     
     def draw_limb_length_indicators(self, raw_positions, limb_lengths, ax):
-        """Draw indicators showing limb lengths"""
+        """Draw indicators showing limb lengths with fixed coordinate system"""
         # Define limb endpoints
         limb_endpoints = {
             'left_arm': ['LEFT_SHOULDER', 'LEFT_WRIST'],
@@ -123,13 +147,14 @@ class EnhancedDanceMoveVisualizer:
                 mid_x = (start_pos[0] + end_pos[0]) / 2
                 mid_y = (start_pos[1] + end_pos[1]) / 2
                 
-                # Add length text
+                # Add length text (smaller font for fixed coordinate system)
+                fontsize = 6 if self.fixed_axes else 8
                 length = limb_lengths.get(limb_name, 0)
                 ax.text(mid_x, mid_y, f'{length:.2f}', 
-                    fontsize=8, bbox=dict(facecolor='white', alpha=0.7))
+                       fontsize=fontsize, bbox=dict(facecolor='white', alpha=0.7))
     
     def draw_joint_angles(self, raw_positions, angles, ax):
-        """Draw joint angles on the skeleton"""
+        """Draw joint angles on the skeleton with fixed coordinate system"""
         # Map angles to joints
         angle_mapping = [
             ('LEFT_ELBOW', 'LEFT_SHOULDER', 'LEFT_ELBOW', 'LEFT_WRIST'),
@@ -149,19 +174,20 @@ class EnhancedDanceMoveVisualizer:
                 point_c = raw_positions[c]
                 
                 # Calculate angle position (slightly offset from joint)
-                offset = 0.1
+                offset = 0.03 if self.fixed_axes else 0.1
                 text_x = point_b[0] + offset
                 text_y = point_b[1] + offset
                 
-                # Add angle text
+                # Add angle text (smaller font for fixed coordinate system)
+                fontsize = 6 if self.fixed_axes else 8
                 ax.text(text_x, text_y, f'{angles[i]:.1f}°', 
-                    fontsize=8, bbox=dict(facecolor='yellow', alpha=0.7))
+                       fontsize=fontsize, bbox=dict(facecolor='yellow', alpha=0.7))
                 
                 # Draw angle arc
                 self.draw_angle_arc(point_a, point_b, point_c, angles[i], ax)
     
     def draw_angle_arc(self, point_a, point_b, point_c, angle, ax):
-        """Draw an arc representing the joint angle"""
+        """Draw an arc representing the joint angle with fixed coordinate system"""
         # Convert points to numpy arrays
         a = np.array(point_a)
         b = np.array(point_b)
@@ -174,47 +200,59 @@ class EnhancedDanceMoveVisualizer:
         # Calculate angle between vectors
         angle_rad = np.arctan2(bc[1], bc[0]) - np.arctan2(ba[1], ba[0])
         
-        # Draw arc
-        arc_radius = 0.1
+        # Draw arc with appropriate size for coordinate system
+        arc_radius = 0.03 if self.fixed_axes else 0.1
         arc = patches.Arc(b, arc_radius, arc_radius, angle=0, 
-                        theta1=np.degrees(np.arctan2(ba[1], ba[0])), 
-                        theta2=np.degrees(np.arctan2(bc[1], bc[0])),
-                        color='red', linewidth=2, alpha=0.7)
+                         theta1=np.degrees(np.arctan2(ba[1], ba[0])), 
+                         theta2=np.degrees(np.arctan2(bc[1], bc[0])),
+                         color='red', linewidth=2, alpha=0.7)
         ax.add_patch(arc)
     
     def visualize_enhanced_dance_moves(self, enhanced_data, output_path=None):
-        """Create an animation of dance moves using enhanced data"""
+        """Create an animation of dance moves using enhanced data with fixed coordinates"""
         frames = len(enhanced_data)
         
         # Create animation
-        fig, ax = plt.subplots(figsize=(12, 10))
+        fig, ax = plt.subplots(figsize=(10, 8))
+        
+        # Set fixed coordinate system for all frames
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_aspect('equal')
+        ax.invert_yaxis()
         
         def update(frame):
             ax.clear()
+            # Reapply fixed coordinate system for each frame
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_aspect('equal')
+            ax.invert_yaxis()
+            
             pose_data = enhanced_data[frame]
             self.create_skeleton_frame_enhanced(pose_data, ax, frame, frames)
             return ax,
         
-        ani = FuncAnimation(fig, update, frames=frames, blit=False, repeat=True)
+        ani = FuncAnimation(fig, update, frames=frames, blit=False, repeat=True, interval=100)
         
         # Save to file if output path is provided
         if output_path:
             import os
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            ani.save(output_path, writer='pillow', fps=10)
+            ani.save(output_path, writer='pillow', fps=10, dpi=100)
             print(f"Enhanced animation saved to {output_path}")
         
         plt.close()
         return ani
     
     def create_enhanced_dance_move_sheet(self, enhanced_data, output_path=None):
-        """Create a sheet with key poses from the enhanced dance data"""
+        """Create a sheet with key poses from the enhanced dance data with fixed coordinates"""
         frames = len(enhanced_data)
         
         # Select key frames to display
         key_frames = [0, frames//4, frames//2, 3*frames//4, frames-1]
         
-        fig, axes = plt.subplots(1, len(key_frames), figsize=(20, 5))
+        fig, axes = plt.subplots(1, len(key_frames), figsize=(15, 4))
         if len(key_frames) == 1:
             axes = [axes]
         
@@ -222,6 +260,12 @@ class EnhancedDanceMoveVisualizer:
         
         for i, frame_idx in enumerate(key_frames):
             ax = axes[i]
+            # Set fixed coordinate system for each subplot
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.set_aspect('equal')
+            ax.invert_yaxis()
+            
             pose_data = enhanced_data[frame_idx]
             self.create_skeleton_frame_enhanced(pose_data, ax, frame_idx, frames)
         
@@ -236,14 +280,20 @@ class EnhancedDanceMoveVisualizer:
         return fig
     
     def visualize_spatial_movement(self, enhanced_data, output_path=None):
-        """Visualize how the dancer moves through space using enhanced data"""
+        """Visualize how the dancer moves through space using enhanced data with fixed coordinates"""
         # Extract body centers and orientations
         body_centers = [frame['body_center'] for frame in enhanced_data]
         body_orientations = [frame['body_orientation'] for frame in enhanced_data]
         
         body_centers = np.array(body_centers)
         
-        plt.figure(figsize=(12, 10))
+        plt.figure(figsize=(10, 8))
+        
+        # Set fixed coordinate system
+        plt.xlim(0, 1)
+        plt.ylim(0, 1)
+        plt.gca().set_aspect('equal')
+        plt.gca().invert_yaxis()
         
         # Plot trajectory
         plt.plot(body_centers[:, 0], body_centers[:, 1], 'b-', alpha=0.5, label='Body trajectory')
@@ -259,10 +309,10 @@ class EnhancedDanceMoveVisualizer:
         for i in range(0, len(body_centers), arrow_interval):
             center = body_centers[i]
             orientation = body_orientations[i]
-            dx = 0.2 * np.cos(orientation)
-            dy = 0.2 * np.sin(orientation)
+            dx = 0.05 * np.cos(orientation)  # Smaller arrows for fixed coordinate system
+            dy = 0.05 * np.sin(orientation)
             plt.arrow(center[0], center[1], dx, dy, 
-                    head_width=0.05, head_length=0.05, fc='red', ec='red', alpha=0.7)
+                     head_width=0.01, head_length=0.01, fc='red', ec='red', alpha=0.7)
         
         # Mark start and end points
         plt.scatter(body_centers[0, 0], body_centers[0, 1], c='green', s=100, marker='o', label='Start')
@@ -273,7 +323,6 @@ class EnhancedDanceMoveVisualizer:
         plt.ylabel('Y position (normalized)')
         plt.legend()
         plt.grid(True, alpha=0.3)
-        plt.gca().invert_yaxis()  # Invert y-axis to match image coordinates
         
         if output_path:
             import os
